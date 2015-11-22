@@ -1,0 +1,171 @@
+---
+title: "Practical Machine Learning - Course Project"
+author: "Pubali Kanjilal"
+date: "Sunday, November 22, 2015"
+output: html_document
+---
+
+#### Background
+
+###### Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+
+#### Objective
+
+###### The goal of this project is to predict the manner in which that participants of the fitness project exercised. We will use data from accelerometers of belt, forearm, arm, and dumbell of 6 participants who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+
+### 01. Data Preprocessing
+
+
+#### 01A. Download Datasets - Training & Testing
+##### We extract the Training & Testing datasets to the Working Directory.
+
+```{r}
+
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",destfile="./Training.csv")
+
+download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",destfile="./Testing.csv")
+
+```
+
+
+#### 01B. Reading and Exploring the Data
+##### We read the downloaded datasets into two Data Frames
+
+```{r}
+
+training <- read.csv("Training.csv",na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("Testing.csv",na.strings=c("NA","#DIV/0!",""))
+
+dim(training)
+dim(testing)
+
+```
+
+##### Training Dataset contains 19622 observations and 160 variables.
+##### Testing Dataset contains 20 observations and 160 variables.
+##### Variable to be predicted is "classe".
+
+
+#### 01C. Data Cleaning
+
+##### Here we will treat for Missing Values and also drop variables that are not accelerometer related.
+
+```{r}
+
+sum(complete.cases(training))
+
+colNA<-colMeans(is.na(training))
+colNA
+
+training2<-training[,colMeans(is.na(training))<.97]
+testing2<-testing[,colMeans(is.na(testing))<.97]
+
+dim(training2)
+dim(testing2)
+
+training3<-training2[,c(grep("belt|forearm|arm|dumbbell",names(training2)),ncol(training2))]
+testing3<-testing2[,c(grep("belt|forearm|arm|dumbbell",names(testing2)))]
+
+dim(training3)
+dim(testing3)
+
+```
+
+##### Columns with more than 97% Missing Values have been dropped as imputation is futile in this case.
+##### Training Data now contains 19622 observations and 53 variables.
+##### Testing Data now contains 20 observatiobs and 52 variables.
+
+#### 01D. Data Slicing
+
+##### We will partition the cleaned training dataset in 70%-30% so as to hold out the 30% for the purpose of model cross-validation.
+
+```{r}
+
+library(caret)
+
+set.seed(987987)
+
+inTrain <- createDataPartition(training3$classe, 
+                               p = .70, 
+                               list=FALSE)
+
+
+train <- training3[inTrain,]
+intime <- training3[-inTrain,]
+
+dim(train)
+dim(intime)
+
+```
+
+### 02. Data Modeling
+##### Model will be trained on 70% data and validated on 30% hold-out sample.
+
+#### 02A. Train Model on 70% Data
+##### We will fit a predictive model for activity recognition by using Random Forest technique as the variable selection is automatic in the process, accounting for correlated variables and outliers as well.
+
+```{r}
+
+library(randomForest)
+
+control <- trainControl(method='cv',5)
+
+rf <- randomForest(classe ~.,
+                  trControl=control,
+                  data=train, 
+                  ntree=350, 
+                  imp=TRUE)
+
+rf
+varImpPlot(rf)
+
+pred <- predict(rf, train)
+confusionMatrix(train$classe,pred)
+
+```
+
+##### Model Accuracy looks good as all the measures are in desired range.
+
+#### 02B. Cross-Validation
+##### We now test the model performance on the hold-out sample for cross-validation.
+
+```{r}
+
+testpred <- predict(rf, intime)
+confusionMatrix(intime$classe,testpred)
+
+```
+
+##### Estimated accuracy of the model is 99.35%, also implying an estimated error rate of 0.65%. Since measures are in desired range, the model is fit to be used on testing data.
+
+#### 02C. Prediction for Test Dataset
+##### We apply the model on the originally downloaded 20 test cases for precticting Class.
+
+```{r}
+
+result <- predict(rf, testing3)
+result
+
+```
+
+
+##### For Submission for Autograding
+
+```{r}
+finaltestpred <- as.character(predict(rf, testing3))
+
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(finaltestpred)
+
+```
